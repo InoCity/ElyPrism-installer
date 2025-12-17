@@ -1,79 +1,106 @@
 #!/bin/bash
+set -euo pipefail
 
-# -------------------------
-# Checar dependências
-# -------------------------
-check_command() {
-    command -v "$1" >/dev/null 2>&1 || {
-        echo "Dependência faltando: $1"
-        exit 1
-    }
-}
+# =====================
+# Visual simples
+# =====================
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+NC='\033[0m'
 
-for cmd in curl wget jq update-desktop-database; do
-    check_command "$cmd"
+ok()   { echo -e "${GREEN}✔ $1${NC}"; }
+warn() { echo -e "${YELLOW}⚠ $1${NC}"; }
+err()  { echo -e "${RED}✖ $1${NC}"; exit 1; }
+info() { echo -e "${BLUE}➜ $1${NC}"; }
+
+# =====================
+# Arquitetura
+# =====================
+[ "$(uname -m)" = "x86_64" ] || err "Arquitetura não suportada"
+
+# =====================
+# Dependências
+# =====================
+DEPS=(curl jq pv update-desktop-database)
+missing=()
+
+for d in "${DEPS[@]}"; do
+    command -v "$d" &>/dev/null || missing+=("$d")
 done
 
-# -------------------------
-# Diretórios
-# -------------------------
-USER_HOME="$HOME"
-ELY_DIR="$USER_HOME/ElyPrism"
-APPIMAGE_FILE="$ELY_DIR/ElyPrismLauncher-Linux-x86_64.AppImage"
-ICON_FILE="$ELY_DIR/icon.png"
-DESKTOP_FILE="$USER_HOME/.local/share/applications/elyprism.desktop"
-
-mkdir -p "$ELY_DIR"
-mkdir -p "$(dirname "$DESKTOP_FILE")"
-
-# -------------------------
-# Buscar AppImage mais recente (API GitHub)
-# -------------------------
-echo "Buscando AppImage x86_64 mais recente..."
-
-APPIMAGE_URL=$(curl -s https://api.github.com/repos/ElyPrismLauncher/ElyPrismLauncher/releases/latest \
-  | jq -r '.assets[] | select(.name | test("Linux-x86_64.*AppImage$")) | .browser_download_url')
-
-if [ -z "$APPIMAGE_URL" ]; then
-    echo "Não foi possível encontrar o AppImage x86_64."
-    exit 1
+if [ "${#missing[@]}" -ne 0 ]; then
+    warn "Dependências faltando: ${missing[*]}"
+    echo -e "${BLUE}🔐 Digite sua senha para instalar automaticamente:${NC}"
+    sudo -v || err "Senha incorreta"
+    sudo dnf install -y curl jq pv desktop-file-utils >/dev/null 2>&1
+    ok "Dependências instaladas"
+else
+    ok "Dependências OK"
 fi
 
-echo "Baixando ElyPrismLauncher..."
-wget -q --show-progress -O "$APPIMAGE_FILE" "$APPIMAGE_URL" || exit 1
-chmod +x "$APPIMAGE_FILE"
+# =====================
+# Diretórios
+# =====================
+ELY_DIR="$HOME/ElyPrism"
+APPIMAGE="$ELY_DIR/ElyPrismLauncher-Linux-x86_64.AppImage"
+ICON="$ELY_DIR/icon.png"
+DESKTOP="$HOME/.local/share/applications/elyprism.desktop"
 
-# -------------------------
+mkdir -p "$ELY_DIR" "$(dirname "$DESKTOP")"
+
+# =====================
+# Buscar release
+# =====================
+info "Buscando versão mais recente"
+
+URL=$(curl -s https://api.github.com/repos/ElyPrismLauncher/ElyPrismLauncher/releases/latest \
+ | jq -r '.assets[] | select(.name | test("Linux-x86_64.*AppImage$")) | .browser_download_url')
+
+[ -n "$URL" ] || err "AppImage não encontrado"
+ok "Release encontrada"
+
+# =====================
+# Download (barra limpa)
+# =====================
+info "Baixando ElyPrismLauncher"
+
+curl -L "$URL" -s \
+| pv -p -t -e -r \
+> "$APPIMAGE"
+
+chmod +x "$APPIMAGE"
+ok "Download concluído"
+
+# =====================
 # Ícone
-# -------------------------
-echo "Baixando ícone..."
-wget -q --show-progress -O "$ICON_FILE" \
-"https://raw.githubusercontent.com/InoCity/ElyPrism-installer/main/icon.png" || exit 1
+# =====================
+curl -sL \
+"https://raw.githubusercontent.com/InoCity/ElyPrism-installer/main/icon.png" \
+-o "$ICON" 2>/dev/null || warn "Ícone não baixado"
 
-# -------------------------
-# Criar .desktop
-# -------------------------
-cat > "$DESKTOP_FILE" <<EOF
+# =====================
+# .desktop
+# =====================
+cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Name=ElyPrism Launcher
-Exec=$APPIMAGE_FILE
-Icon=$ICON_FILE
+Exec=$APPIMAGE
+Icon=$ICON
 Type=Application
 Categories=Game;Minecraft;
 Terminal=false
+StartupWMClass=elyprism
 EOF
 
-# -------------------------
-# Atualizar menu
-# -------------------------
-update-desktop-database "$USER_HOME/.local/share/applications/" 2>/dev/null
+update-desktop-database "$HOME/.local/share/applications/" >/dev/null 2>&1
+ok "Atalho criado no menu"
 
-# -------------------------
-# Executar
-# -------------------------
-read -p "Deseja executar o ElyPrism agora? (y/n) " RESP
-if [[ "$RESP" =~ ^[Yy]$ ]]; then
-    "$APPIMAGE_FILE" &
-fi
-
-echo "Instalação concluída! ElyPrism já aparece no menu."
+# =====================
+# Final
+# =====================
+echo
+ok "Instalação concluída 🎉"
+read -p "Deseja executar agora? (y/n) " r
+[[ "$r" =~ ^[Yy]$ ]] && "$APPIMAGE" &
