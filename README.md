@@ -1,5 +1,25 @@
 # **ElyPrism-installer**
 
-## An easy ElyPrismLauncher installer, using .appimage and .sh to make it better than flatpak installation!
+An easy and lightweight ElyPrism Launcher installer, using **AppImage** and a simple **.sh script** — cleaner and more flexible than Flatpak, with **no bugs from Flatpak**.
 
 <img src="ElyPrism.png">
+
+---
+
+## Installation
+
+After downloading the installer, run it with:
+
+```bash
+sh /path/to/ElyPrism.sh
+```
+
+The script will handle everything automatically (dependencies, setup, and execution), and **there is no need to run it from the terminal after installation** — it automatically creates a menu entry, so you can launch it from your system app menu.
+
+---
+
+## Notes
+
+* No Flatpak required
+* Portable AppImage
+* Simple and fast installation
